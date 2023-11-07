@@ -1,4 +1,4 @@
-use glam::{Vec2, Vec3};
+use glam::Vec3;
 use sdl2::event::Event;
 use sdl2::keyboard::Keycode;
 use sdl2::pixels::Color;
@@ -17,6 +17,28 @@ struct Sphere {
 
 struct Scene {
     spheres: Vec<Sphere>,
+}
+
+#[derive(Copy, Clone)]
+struct Canvas {
+    width: i32,
+    height: i32
+}
+
+impl Canvas {
+    fn each(self, f: &mut dyn FnMut(i32, i32, i32, i32, Self)) {
+        for cx in (-self.width / 2)..(self.width / 2) {
+            for cy in (-self.height / 2)..(self.height / 2) {
+                f(cx, cy, self.width, self.height, self)
+            }
+        }
+    }
+
+    fn to_screen(self, x: i32, y: i32) -> Point {
+        let sx = (self.width / 2) + x;
+        let sy = (self.height / 2) - y;
+        Point::new(sx as i32, sy as i32)
+    }
 }
 
 fn canvas_2_viewport(
@@ -77,12 +99,11 @@ fn trace_ray(origin: Vec3, distance: Vec3, min_t: f32, max_t: f32, scene: &Scene
 }
 
 fn main() {
-    let cw: i32 = 800;
-    let ch: i32 = 600;
+    let canvas = Canvas{ width: 800, height: 600 };
     let sdl_context = sdl2::init().unwrap();
     let video_subsystem = sdl_context.video().unwrap();
     let window = video_subsystem
-        .window("Raytracer", cw as u32, ch as u32)
+        .window("Raytracer", canvas.width as u32, canvas.height as u32)
         .build()
         .unwrap();
     let mut sdl_canvas = window.into_canvas().present_vsync().build().unwrap();
@@ -115,23 +136,19 @@ fn main() {
         1.0);
 
     // For each point in the canvas...
-    for cx in (-cw / 2)..(cw / 2) {
-        for cy in (-ch / 2)..(ch / 2) {
-            // Get the direction of the casted ray, from O and passing through V, that would go into the canvas point
-            let direction = canvas_2_viewport(cx, cy, cw, ch, viewport);
+    canvas.each(&mut |cx, cy, width, height, instance| {
+        // Get the direction of the casted ray, from O and passing through V, that would go into the canvas point
+        let direction = canvas_2_viewport(cx, cy, width, height, viewport);
 
-            // See if the ray hits something, and if so, get the color of the object we hit
-            let color = trace_ray(origin, direction, 1.0, INF, &scene);
+        // See if the ray hits something, and if so, get the color of the object we hit
+        let color = trace_ray(origin, direction, 1.0, INF, &scene);
 
-            sdl_canvas.set_draw_color(color);
+        sdl_canvas.set_draw_color(color);
 
-            let sx = (cw / 2) + cx;
-            let sy = (ch / 2) - cy;
-            sdl_canvas
-                .draw_point(Point::new(sx as i32, sy as i32))
-                .unwrap();
-        }
-    }
+        sdl_canvas
+            .draw_point(instance.to_screen(cx, cy))
+            .unwrap();
+    });
 
     sdl_canvas.present();
     let mut event_pump = sdl_context.event_pump().unwrap();
