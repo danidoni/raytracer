@@ -22,13 +22,13 @@ struct Scene {
 fn canvas_2_viewport(
     x: i32,
     y: i32,
-    canvas_w: i32,
-    canvas_h: i32,
+    width: i32,
+    height: i32,
     viewport: Vec3,
 ) -> Vec3 {
     return Vec3::new(
-        x as f32 * (viewport.x as f32 / canvas_w as f32),
-        y as f32 * (viewport.y as f32 / canvas_h as f32),
+        x as f32 * (viewport.x as f32 / width as f32),
+        y as f32 * (viewport.y as f32 / height as f32),
         viewport.z as f32,
     );
 }
