@@ -15,9 +15,66 @@ struct Sphere {
     color: Color,
 }
 
+impl Sphere {
+    fn ray_intersection(&self, origin: Vec3, distance: Vec3) -> (f32, f32) {
+        let r = self.radius;
+        let co = origin - self.center;
+
+        let a = distance.dot(distance);
+        let b = 2.0 * co.dot(distance);
+        let c = co.dot(co) - r * r;
+
+        let discriminant = b * b - 4.0 * a * c;
+        if discriminant < 0.0 {
+            return (INF, INF);
+        }
+
+        let t1 = (-b + discriminant.sqrt()) / (2.0 * a);
+        let t2 = (-b - discriminant.sqrt()) / (2.0 * a);
+
+        return (t1, t2);
+    }
+}
+
 struct Scene {
     spheres: Vec<Sphere>,
     lighting: Vec<Light>
+}
+
+impl Scene {
+    fn trace_ray(&self, origin: Vec3, direction: Vec3, min_t: f32, max_t: f32) -> Color {
+        let mut closest_t = INF;
+        let mut closest_sphere = None;
+
+        for sphere in &self.spheres {
+            let ts = sphere.ray_intersection(origin, direction);
+            let t1 = ts.0;
+            let t2 = ts.1;
+            if min_t < t1 && t1 < max_t && t1 < closest_t {
+                closest_t = t1;
+                closest_sphere = Some(sphere);
+            }
+            if min_t < t2 && t2 < max_t && t2 < closest_t {
+                closest_t = t2;
+                closest_sphere = Some(sphere);
+            }
+        }
+
+        return match closest_sphere {
+            None => BACKGROUND_COLOR,
+            Some(sphere) => { 
+                let p = origin + closest_t * direction;
+                let mut n = p - sphere.center;
+                n = n / n.length();
+                let light_intensity = compute_lighting(p, n, self);
+                return Color::RGB(
+                    ( sphere.color.r as f32 * light_intensity ) as u8,
+                    ( sphere.color.g as f32 * light_intensity ) as u8,
+                    ( sphere.color.b as f32 * light_intensity ) as u8
+                );
+            },
+        };
+    }
 }
 
 #[derive(Copy, Clone)]
@@ -54,59 +111,6 @@ fn canvas_2_viewport(
         y as f32 * (viewport.y as f32 / height as f32),
         viewport.z as f32,
     );
-}
-
-fn intersect_ray_sphere(origin: Vec3, distance: Vec3, sphere: &Sphere) -> (f32, f32) {
-    let r = sphere.radius;
-    let co = origin - sphere.center;
-
-    let a = distance.dot(distance);
-    let b = 2.0 * co.dot(distance);
-    let c = co.dot(co) - r * r;
-
-    let discriminant = b * b - 4.0 * a * c;
-    if discriminant < 0.0 {
-        return (INF, INF);
-    }
-
-    let t1 = (-b + discriminant.sqrt()) / (2.0 * a);
-    let t2 = (-b - discriminant.sqrt()) / (2.0 * a);
-
-    return (t1, t2);
-}
-
-fn trace_ray(origin: Vec3, direction: Vec3, min_t: f32, max_t: f32, scene: &Scene) -> Color {
-    let mut closest_t = INF;
-    let mut closest_sphere = None;
-
-    for sphere in &scene.spheres {
-        let ts = intersect_ray_sphere(origin, direction, &sphere);
-        let t1 = ts.0;
-        let t2 = ts.1;
-        if min_t < t1 && t1 < max_t && t1 < closest_t {
-            closest_t = t1;
-            closest_sphere = Some(sphere);
-        }
-        if min_t < t2 && t2 < max_t && t2 < closest_t {
-            closest_t = t2;
-            closest_sphere = Some(sphere);
-        }
-    }
-
-    return match closest_sphere {
-        None => BACKGROUND_COLOR,
-        Some(sphere) => { 
-            let p = origin + closest_t * direction;
-            let mut n = p - sphere.center;
-            n = n / n.length();
-            let light_intensity = compute_lighting(p, n, scene);
-            return Color::RGB(
-                ( sphere.color.r as f32 * light_intensity ) as u8,
-                ( sphere.color.g as f32 * light_intensity ) as u8,
-                ( sphere.color.b as f32 * light_intensity ) as u8
-            );
-         },
-    };
 }
 
 enum LightType {
@@ -222,7 +226,7 @@ fn main() {
         let direction = canvas_2_viewport(cx, cy, width, height, viewport);
 
         // See if the ray hits something, and if so, get the color of the object we hit
-        let color = trace_ray(origin, direction, 1.0, INF, &scene);
+        let color = scene.trace_ray(origin, direction, 1.0, INF);
 
         sdl_canvas.set_draw_color(color);
 
