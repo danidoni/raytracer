@@ -17,6 +17,7 @@ struct Sphere {
 
 struct Scene {
     spheres: Vec<Sphere>,
+    lighting: Vec<Light>
 }
 
 #[derive(Copy, Clone)]
@@ -74,12 +75,12 @@ fn intersect_ray_sphere(origin: Vec3, distance: Vec3, sphere: &Sphere) -> (f32, 
     return (t1, t2);
 }
 
-fn trace_ray(origin: Vec3, distance: Vec3, min_t: f32, max_t: f32, scene: &Scene) -> Color {
+fn trace_ray(origin: Vec3, direction: Vec3, min_t: f32, max_t: f32, scene: &Scene) -> Color {
     let mut closest_t = INF;
     let mut closest_sphere = None;
 
     for sphere in &scene.spheres {
-        let ts = intersect_ray_sphere(origin, distance, &sphere);
+        let ts = intersect_ray_sphere(origin, direction, &sphere);
         let t1 = ts.0;
         let t2 = ts.1;
         if min_t < t1 && t1 < max_t && t1 < closest_t {
@@ -94,8 +95,63 @@ fn trace_ray(origin: Vec3, distance: Vec3, min_t: f32, max_t: f32, scene: &Scene
 
     return match closest_sphere {
         None => BACKGROUND_COLOR,
-        Some(sphere) => sphere.color,
+        Some(sphere) => { 
+            let p = origin + closest_t * direction;
+            let mut n = p - sphere.center;
+            n = n / n.length();
+            let light_intensity = compute_lighting(p, n, scene);
+            return Color::RGB(
+                ( sphere.color.r as f32 * light_intensity ) as u8,
+                ( sphere.color.g as f32 * light_intensity ) as u8,
+                ( sphere.color.b as f32 * light_intensity ) as u8
+            );
+         },
     };
+}
+
+enum LightType {
+    Ambient,
+    Point,
+    Directional
+}
+
+struct Light {
+    kind: LightType,
+    intensity: f32,
+    position: Option<Vec3>,
+    direction: Option<Vec3>
+}
+
+fn compute_lighting(p: Vec3, n: Vec3, scene: &Scene) -> f32 {
+    let mut i = 0.0;
+
+    for light in &scene.lighting {
+        match light.kind {
+            LightType::Ambient => {
+                i += light.intensity;
+            },
+            LightType::Point => {
+                let l = light.position.unwrap() - p;
+                let n_dot_l = n.dot(l);
+                // If the angle between the normal and the light vector is greater than 90, 
+                // the light is coming from behind the surface, so it cannot contribute to the lighting
+                if n_dot_l > 0.0 {
+                    i += light.intensity * n_dot_l / (n.length() * l.length());
+                }
+            },
+            LightType::Directional => {
+                let l = light.direction.unwrap();
+                let n_dot_l = n.dot(l);
+                // If the angle between the normal and the light vector is greater than 90, 
+                // the light is coming from behind the surface, so it cannot contribute to the lighting
+                if n_dot_l > 0.0 {
+                    i += light.intensity * n_dot_l / (n.length() * l.length());
+                }
+            }
+        }
+    }
+
+    return i;
 }
 
 fn main() {
@@ -124,7 +180,32 @@ fn main() {
                 radius: 1.0,
                 color: Color::RGB(0, 255, 0),
             },
+            Sphere {
+                center: Vec3::new(0.0, -5001.0, 0.0),
+                radius: 5000.0,
+                color: Color::RGB(255, 255, 0)
+            }
         ],
+        lighting: vec![
+            Light {
+                kind: LightType::Ambient,
+                intensity: 0.2,
+                position: None,
+                direction: None
+            },
+            Light {
+                kind: LightType::Point,
+                intensity: 0.6,
+                position: Some(Vec3::new(2.0, 1.0, 0.0)),
+                direction: None
+            },
+            Light {
+                kind: LightType::Directional,
+                intensity: 0.2,
+                position: None,
+                direction: Some(Vec3::new(1.0, 4.0, 4.0))
+            }
+        ]
     };
 
     // This is the camera origin
